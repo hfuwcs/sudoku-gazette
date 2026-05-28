@@ -4,6 +4,8 @@ import fs from 'fs/promises';
 import { createServer as createViteServer } from 'vite';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -22,6 +24,27 @@ const DATA_FILE = path.join(DATA_DIR, 'puzzles.json');
 
 // In-memory cache for ultra-fast solution retrievals
 const puzzleCache: Record<string, StoredPuzzle> = {};
+
+// Validation helpers
+const VALID_DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'];
+const PUZZLE_ID_RE = /^[EMHX]\d{4}$/;
+
+function validatePuzzle(p: any): string | null {
+  if (!p || typeof p !== 'object') return 'Invalid puzzle object.';
+  if (typeof p.puzzleId !== 'string' || !PUZZLE_ID_RE.test(p.puzzleId)) {
+    return 'Invalid puzzleId format (expected e.g. E1234).';
+  }
+  if (!VALID_DIFFICULTIES.includes(p.difficulty)) {
+    return 'Invalid difficulty (expected easy|medium|hard|expert).';
+  }
+  if (typeof p.board !== 'string' || p.board.length !== 81 || /[^0-9]/.test(p.board)) {
+    return 'Invalid board (expected 81 digits 0-9).';
+  }
+  if (typeof p.solution !== 'string' || p.solution.length !== 81 || /[^0-9]/.test(p.solution)) {
+    return 'Invalid solution (expected 81 digits 0-9).';
+  }
+  return null;
+}
 
 // MongoDB Mongoose Schema
 const PuzzleSchema = new mongoose.Schema({
@@ -71,19 +94,34 @@ async function initDatabase() {
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '10mb' })); // support batch generation payloads
+  app.use(helmet());
+  app.use(express.json({ limit: '1mb' }));
+
+  // Rate limiters
+  const bulkLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { error: 'Too many write requests. Try again later.' },
+  });
+  const lookupLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { error: 'Too many lookup requests. Try again later.' },
+  });
 
   // Initialize DB before handling requests
   await initDatabase();
 
   // API Route: Register a newly generated puzzle
-  app.post('/api/puzzles', async (req, res) => {
+  app.post('/api/puzzles', bulkLimiter, async (req, res) => {
     try {
-      const { puzzleId, difficulty, board, solution } = req.body;
-      if (!puzzleId || !difficulty || !board || !solution) {
-         res.status(400).json({ error: 'Missing required puzzle parameters.' });
+      const error = validatePuzzle(req.body);
+      if (error) {
+         res.status(400).json({ error });
          return;
       }
+
+      const { puzzleId, difficulty, board, solution } = req.body;
 
       const newPuzzle: StoredPuzzle = {
         puzzleId,
@@ -115,12 +153,25 @@ async function startServer() {
   });
 
   // API Route: Save multiple puzzles in bulk
-  app.post('/api/puzzles/bulk', async (req, res) => {
+  app.post('/api/puzzles/bulk', bulkLimiter, async (req, res) => {
     try {
       const { puzzles } = req.body; // Array of StoredPuzzle
       if (!puzzles || !Array.isArray(puzzles)) {
          res.status(400).json({ error: 'Required puzzles array missing.' });
          return;
+      }
+
+      if (puzzles.length > 50) {
+         res.status(400).json({ error: 'Bulk write limited to 50 puzzles per request.' });
+         return;
+      }
+
+      for (const p of puzzles) {
+        const err = validatePuzzle(p);
+        if (err) {
+          res.status(400).json({ error: err });
+          return;
+        }
       }
 
       if (useMongoDB) {
@@ -168,7 +219,7 @@ async function startServer() {
   });
 
   // API Route: Lookup a solution by puzzleId
-  app.get('/api/puzzles/:id', async (req, res) => {
+  app.get('/api/puzzles/:id', lookupLimiter, async (req, res) => {
     try {
       const id = req.params.id.toUpperCase().trim();
       let puzzle = null;
