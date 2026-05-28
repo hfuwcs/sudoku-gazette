@@ -1,0 +1,6 @@
+{
+  "name": "Sudoku Gazette",
+  "description": "Generate, customize, and print beautiful multilingual Sudoku worksheets in a classic Newspaper Vintage theme with instant unique QR code solution lookup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
