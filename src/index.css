@@ -27,12 +27,10 @@ body {
 
 /* Custom print media query specifications */
 @media print {
-  /* Suppress browser headers & footers */
   @page {
     margin: 0;
   }
 
-  /* Hide the interface elements during PDF output */
   body {
     background-color: #ffffff !important;
     background: #ffffff !important;
@@ -49,7 +47,6 @@ body {
     display: none !important;
   }
 
-  /* Reset main containers for printing */
   .min-h-screen {
     all: unset !important;
     display: block !important;
@@ -61,16 +58,13 @@ body {
     overflow: visible !important;
   }
 
-  /* Show only the worksheet grids */
   #print-area {
     all: unset !important;
-    display: block !important;
-    max-width: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
   }
 
-  /* Force sheet page wraps — full page coverage */
   .print-page {
     page-break-after: always;
     break-after: page;
@@ -78,22 +72,21 @@ body {
     box-shadow: none !important;
     border: none !important;
     margin: 0 !important;
-    padding: 0.6in !important;
+    padding: 2rem !important;
     background: #ffffff !important;
     color: #000000 !important;
-    width: 100vw !important;
-    min-height: 100vh !important;
-    max-width: 100vw !important;
+    width: var(--paper-w) !important;
+    height: var(--paper-h) !important;
+    max-width: none !important;
     aspect-ratio: auto !important;
     overflow: hidden !important;
+    flex-shrink: 0 !important;
   }
 
-  /* For single grid per page: allow filling more of the page */
   .print-page .grid-rows-1.grid-cols-1 [class*="max-w-["] {
     max-width: 70% !important;
   }
 
-  /* Keep printed Sudoku grids sharp */
   .print-page div, .print-page span {
     color: #000000 !important;
     border-color: #000000 !important;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from '../localization';
 import { LayoutConfig, PuzzleData } from '../types';
 import SudokuGrid from './SudokuGrid';
@@ -17,13 +17,29 @@ interface LivePreviewProps {
 export default function LivePreview({ config, puzzles }: LivePreviewProps) {
   const { lang, t } = useTranslation();
 
-  // Determine paper styling based on size config
-  // A4 ratio: 210/297 = ~0.707
-  // Letter ratio: 8.5/11 = ~0.772
+  // Inject @page size rule so the browser print dialog defaults to the correct paper
+  useEffect(() => {
+    const id = 'dynamic-print-page-size';
+    let el = document.getElementById(id) as HTMLStyleElement | null;
+    if (!el) {
+      el = document.createElement('style');
+      el.id = id;
+      document.head.appendChild(el);
+    }
+    const size = config.paperSize === 'A4' ? 'A4' : 'letter';
+    el.textContent = `@page { size: ${size} portrait; margin: 0; }`;
+  }, [config.paperSize]);
+
+  // Paper aspect ratio — only apply on sm+ screens; on mobile let content set height
   const isA4 = config.paperSize === 'A4';
-  const pageRatioStyle = isA4 
-    ? 'w-full max-w-[720px] aspect-[1/1.414]' 
-    : 'w-full max-w-[720px] aspect-[8.5/11]';
+  const pageRatioStyle = isA4
+    ? 'w-full max-w-[720px] sm:aspect-[1/1.414] aspect-auto'
+    : 'w-full max-w-[720px] sm:aspect-[8.5/11] aspect-auto';
+
+  // Absolute paper dimensions for print — bypasses the broken height:100% chain
+  const paperStyle = isA4
+    ? ({ '--paper-w': '210mm', '--paper-h': '297mm' } as React.CSSProperties)
+    : ({ '--paper-w': '8.5in', '--paper-h': '11in' } as React.CSSProperties);
 
   // Chop puzzles into pages based on gridsPerPage
   const pages: PuzzleData[][] = [];
@@ -38,17 +54,16 @@ export default function LivePreview({ config, puzzles }: LivePreviewProps) {
     }
   }
 
-  // Choose CSS grid class based on gridsPerPage
   const getGridClass = (count: number) => {
     switch (count) {
       case 1:
-        return 'grid-cols-1 grid-rows-1 gap-12 justify-center items-center h-full p-8';
+        return 'grid-cols-1 grid-rows-1 gap-12 justify-center items-center sm:h-full p-8';
       case 2:
-        return 'grid-cols-1 grid-rows-2 gap-8 justify-center h-full p-6';
+        return 'grid-cols-1 grid-rows-2 gap-8 justify-center sm:h-full p-6';
       case 4:
-        return 'grid-cols-2 grid-rows-2 gap-x-6 gap-y-4 justify-center h-full p-5';
+        return 'grid-cols-2 grid-rows-2 gap-x-6 gap-y-4 justify-center sm:h-full p-5';
       case 6:
-        return 'grid-cols-2 grid-rows-3 gap-x-4 gap-y-1.5 justify-center h-full p-2';
+        return 'grid-cols-2 grid-rows-3 gap-x-4 gap-y-1.5 justify-center sm:h-full p-2';
       default:
         return 'grid-cols-2 grid-rows-2 gap-6';
     }
@@ -78,6 +93,7 @@ export default function LivePreview({ config, puzzles }: LivePreviewProps) {
           <div
             key={pageIdx}
             className={`print-page bg-white border-2 border-black shadow-lg relative p-8 flex flex-col justify-between overflow-hidden text-black ${pageRatioStyle}`}
+            style={paperStyle}
           >
             {/* Page Header (Gazette style) */}
             <div className="border-b-2 border-double border-black pb-1.5 mb-2 flex justify-between items-center text-[10px] font-sans uppercase tracking-widest font-black">
